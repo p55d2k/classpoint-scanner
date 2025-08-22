@@ -1,54 +1,48 @@
-from src.constants import VERSION
+from __future__ import annotations
 
-import sys
-import requests
+import argparse
+from dataclasses import dataclass
+from typing import Optional
+
+from src.constants import VERSION, START_CODE, END_CODE, AMOUNT_THREADS
 
 
-def parse_args(args):
-    if args[0] == "-h":
-        print(
-            """Usage: python3 main.py [OPTIONS]
-    
-Options:
-    -h, --help\t\t\tShow this help message and exit
-    -o, --output\t\tOutput file name and exit
-    -v, --version\t\tShow program's version number and exit
-    -t, --threads\t\tSet the amount of threads to use
-    -c, --code [class code]\tCheck if a class code is valid and exit
-    
-If no options are provided, the program will run with default settings."""
-        )
-        sys.exit(0)
-    elif args[0] == "-o" or args[0] == "--output":
-        print("Output file name: /links/links_{current_datetime}.txt")
-        sys.exit(0)
-    elif args[0] == "-v" or args[0] == "--version":
-        print(f"classpoint-scanner v{VERSION}")
-        sys.exit(0)
-    elif args[0] == "-t" or args[0] == "--threads":
-        if len(args) < 2:
-            print("Invalid option. Use -h or --help for help.")
-            sys.exit(1)
-        elif args[1].isnumeric():
-            return max(min(int(args[1]), 128), 1)
-        else:
-            print("Invalid option. Use -h or --help for help.")
-            sys.exit(1)
-    elif args[0] == "-c" or args[0] == "--code":
-        if len(args) < 2:
-            print("Invalid option. Use -h or --help for help.")
-            sys.exit(1)
-        if (
-            requests.get(
-                f"https://apitwo.classpoint.app/classcode/region/byclasscode?classcode={args[1]}"
-            ).status_code
-            != 200
-        ):
-            print(f"Class code {args[1]} is invalid.")
-            sys.exit(1)
-        else:
-            print(f"Class code {args[1]} is valid.")
-            sys.exit(0)
-    else:
-        print("Invalid option. Use -h or --help for help.")
-        sys.exit(1)
+@dataclass
+class CliConfig:
+    threads: int = AMOUNT_THREADS
+    start: int = START_CODE
+    end: int = END_CODE
+    output: Optional[str] = None
+    code: Optional[int] = None
+    mode: str = "api"  # api | selenium
+    no_verify: bool = False
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="classpoint-scanner")
+    p.add_argument("-t", "--threads", type=int, default=AMOUNT_THREADS, help="Number of threads/workers (api mode uses async workers)")
+    p.add_argument("--start", type=int, default=START_CODE, help="Start of class code range (inclusive)")
+    p.add_argument("--end", type=int, default=END_CODE, help="End of class code range (exclusive)")
+    p.add_argument("-o", "--output", default=None, help="Output file path. Default: links/links.txt")
+    p.add_argument("-c", "--code", type=int, default=None, help="Check a single class code and exit")
+    p.add_argument("-m", "--mode", choices=["api", "selenium"], default="api", help="Validation mode: api (fast) or selenium (slow)")
+    p.add_argument("--no-verify", action="store_true", help="Skip Selenium verification of API-positive codes (api mode only)")
+    p.add_argument("-v", "--version", action="version", version=f"classpoint-scanner v{VERSION}")
+    return p
+
+
+def parse_args(argv: list[str]) -> CliConfig:
+    p = build_parser()
+    ns = p.parse_args(argv)
+    threads = max(1, min(int(ns.threads), 1024))
+    if ns.start >= ns.end:
+        p.error("--start must be < --end")
+    return CliConfig(
+        threads=threads,
+        start=ns.start,
+        end=ns.end,
+        output=ns.output,
+        code=ns.code,
+        mode=ns.mode,
+    no_verify=ns.no_verify,
+    )
